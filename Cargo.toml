@@ -1,0 +1,10 @@
+[package]
+name = "aeroplot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = { version = "0.10.0", features = ["tokio"] }
+plotters = { version = "0.3.5" }
+plotters-iced = "0.9.0"
+tokio = "1.32.0"
