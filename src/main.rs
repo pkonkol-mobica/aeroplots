@@ -1,29 +1,27 @@
 use iced::{
-    alignment::{Horizontal, Vertical},
-    executor, font,
-    futures::io::CopyBufAbortable,
+    executor,
     time::Duration,
     widget::{
         button,
-        canvas::{path::lyon_path::commands::PathCommandsBuilder, Cache, Frame, Geometry},
-        column, row, text, Column, Container, Row, Scrollable, Space, Text,
+        canvas::{Cache, Frame, Geometry},
+        row, text, Column, Container, Text,
     },
-    Alignment, Application, Command, Element, Font, Length, Settings, Size, Subscription, Theme,
+    Alignment, Application, Command, Element, Length, Settings, Size, Subscription, Theme,
 };
 use plotters::prelude::ChartBuilder;
 // use plotters_backend::DrawingBackend;
 use plotters_iced::{plotters_backend::DrawingBackend, Chart, ChartWidget, Renderer};
 
 mod accelerometer;
+mod datasource;
 mod magnetometer;
 
 fn main() {
-    let c = State::run(Settings::default());
+    let _c = State::run(Settings::default());
 }
 
 const DATA1: [(i32, i32); 30] =  [(-3, 1), (-2, 3), (4, 2), (3, 0), (6, -5), (3, 11), (6, 0), (2, 14), (3, 9), (14, 7), (8, 11), (10, 16), (7, 15), (13, 8), (17, 14), (13, 17), (19, 11), (18, 8), (15, 8), (23, 23), (15, 20), (22, 23), (22, 21), (21, 30), (19, 28), (22, 23), (30, 23), (26, 35), (33, 19), (26, 19)];
 const DATA2: [(i32, i32); 30] = [(1, 22), (0, 22), (1, 20), (2, 24), (4, 26), (6, 24), (5, 27), (6, 27), (7, 27), (8, 30), (10, 30), (10, 33), (12, 34), (13, 31), (15, 35), (14, 33), (17, 36), (16, 35), (17, 39), (19, 38), (21, 38), (22, 39), (23, 43), (24, 44), (24, 46), (26, 47), (27, 48), (26, 49), (28, 47), (28, 50)];
-
 
 struct State {
     value: i32,
@@ -132,7 +130,7 @@ impl Chart<Message> for MyChart {
         renderer.draw_cache(&self.cache, bounds, draw_fn)
     }
 
-    fn build_chart<DB: DrawingBackend>(&self, state: &Self::State, mut builder: ChartBuilder<DB>) {
+    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
         use plotters::prelude::*;
         let mut chart = builder
             // .set_all_label_area_size(40)
@@ -147,7 +145,7 @@ impl Chart<Message> for MyChart {
         chart
             .draw_series((0..8).map(|x| Circle::new((x, (x * 2)), 3, GREEN.filled())))
             .unwrap();
-        let candlestick =
+        let _candlestick =
             CandleStick::new(2, 130.0600, 131.3700, 128.8300, 129.1500, &GREEN, &RED, 15);
 
         let mut pie = Pie::new(
@@ -162,7 +160,7 @@ impl Chart<Message> for MyChart {
             .draw_series([(2, 3)].map(|(x, y)| {
                 EmptyElement::at((x, y))
                     + Circle::new((0, 0), 10, BLUE)
-                    + TriangleMarker::new(((4, 5)), 5, RED)
+                    + TriangleMarker::new((4, 5), 5, RED)
             }))
             .unwrap();
 
@@ -170,47 +168,52 @@ impl Chart<Message> for MyChart {
             .draw_series(LineSeries::new((0..10).map(|x| (x, 10 - x)), &BLACK))
             .unwrap();
 
-        chart.draw_series(
-            DATA1.iter().map(|point| TriangleMarker::new(*point, 5, &BLUE)),
-        )
-        .unwrap();
+        chart
+            .draw_series(
+                DATA1
+                    .iter()
+                    .map(|point| TriangleMarker::new(*point, 5, &BLUE)),
+            )
+            .unwrap();
 
         let data = [25, 37, 15, 32, 45, 33, 32, 10, 29, 0, 21];
 
-        chart.draw_series(
-            AreaSeries::new(
-                (0..).zip(data.iter().map(|x| *x)), // The data iter
-                0,                                  // Baseline
-                &RED.mix(0.2) // Make the series opac
-            ).border_style(&RED) // Make a brighter border
-        )
-        .unwrap();
+        chart
+            .draw_series(
+                AreaSeries::new(
+                    (0..).zip(data.iter().map(|x| *x)), // The data iter
+                    0,                                  // Baseline
+                    &RED.mix(0.2),                      // Make the series opac
+                )
+                .border_style(&RED), // Make a brighter border
+            )
+            .unwrap();
 
         let data = [25, 37, 15, 32, 45, 33, 32, 10, 0, 21, 5];
 
-        chart.draw_series((0..).zip(data.iter()).map(|(y, x)| {
-            let mut bar = Rectangle::new([
-                (0, y), 
-                (*x, y + 1)
-            ], GREEN.filled());
-            bar.set_margin(5, 5, 0, 0);
-            bar
-        }))
-        .unwrap();
+        chart
+            .draw_series((0..).zip(data.iter()).map(|(y, x)| {
+                let mut bar = Rectangle::new([(0, y), (*x, y + 1)], GREEN.filled());
+                bar.set_margin(5, 5, 0, 0);
+                bar
+            }))
+            .unwrap();
 
-        chart.draw_series((0..).zip(data.iter()).map(|(x, y)| {
-            let mut bar = Rectangle::new([(x, 0), (x+1, *y)], RED.filled());
-            bar.set_margin(0, 0, 10, 10);
-            bar
-        }))
-        .unwrap();
+        chart
+            .draw_series((0..).zip(data.iter()).map(|(x, y)| {
+                let mut bar = Rectangle::new([(x, 0), (x + 1, *y)], RED.filled());
+                bar.set_margin(0, 0, 10, 10);
+                bar
+            }))
+            .unwrap();
 
-        chart.draw_series(
-            Histogram::vertical(&chart)
-            .margin(10)
-            .data((0..100).map(|x| (x, x%3)))
-        ).unwrap();
-
+        chart
+            .draw_series(
+                Histogram::vertical(&chart)
+                    .margin(10)
+                    .data((0..100).map(|x| (x, x % 3))),
+            )
+            .unwrap();
     }
 }
 
@@ -253,7 +256,7 @@ impl Chart<Message> for My3DChart {
         renderer.draw_cache(&self.cache, bounds, draw_fn)
     }
 
-    fn build_chart<DB: DrawingBackend>(&self, state: &Self::State, mut builder: ChartBuilder<DB>) {
+    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
         use plotters::prelude::*;
         let mut chart = builder
             .caption("test 3D", ("sans-serif", 50).into_font())
@@ -262,9 +265,7 @@ impl Chart<Message> for My3DChart {
             .build_cartesian_3d(-10.0..10.0, -10.0..10.0, -10.0..10.0)
             .unwrap();
 
-        chart.configure_axes()
-        .tick_size(1)
-        .draw().unwrap();
+        chart.configure_axes().tick_size(1).draw().unwrap();
 
         let cubiod = Cubiod::new([(0., 0., 0.), (3., 2., 1.)], BLUE.mix(0.2), BLUE);
         chart.draw_series(std::iter::once(cubiod)).unwrap();

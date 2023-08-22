@@ -12,6 +12,5 @@ struct Aggregate2DChart {
     cache: Cache,
 }
 
-
 // TODO later
-struct Aggregate3DChart { }
+struct Aggregate3DChart {}
