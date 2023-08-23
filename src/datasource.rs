@@ -9,21 +9,21 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data {
     pub timestamp: u64,
     pub acc: AccData,
     pub mag: MagData,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AccData {
     pub x: f64,
     pub y: f64,
     pub z: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MagData {
     pub x: f64,
     pub y: f64,
@@ -54,8 +54,8 @@ impl From<&str> for Data {
     }
 }
 
-async fn stream_file(path: &impl AsRef<Path>) -> impl Stream<Item = Data> {
-    let (tx, mut rx) = mpsc::channel::<Data>(10);
+pub async fn stream_file(path: &impl AsRef<Path>) -> impl Stream<Item = Data> {
+    let (tx, rx) = mpsc::channel::<Data>(10);
 
     // let x = path.to_owned();
     let p = PathBuf::from(path.as_ref());
@@ -83,6 +83,8 @@ async fn stream_file(path: &impl AsRef<Path>) -> impl Stream<Item = Data> {
 
     ReceiverStream::new(rx)
 }
+
+// TODO later stream from tailing a file or from some /dev/ttyUSB
 
 #[cfg(test)]
 mod tests {

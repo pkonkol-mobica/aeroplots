@@ -1,115 +1,72 @@
+use std::{pin::pin, vec};
+
 use iced::{
     executor,
     time::Duration,
     widget::{
         button,
         canvas::{Cache, Frame, Geometry},
-        row, text, Column, Container, Text,
+        column, row, text, Column, Container, Text,
     },
+    window::Action,
     Alignment, Application, Command, Element, Length, Settings, Size, Subscription, Theme,
 };
 use plotters::prelude::ChartBuilder;
 // use plotters_backend::DrawingBackend;
 use plotters_iced::{plotters_backend::DrawingBackend, Chart, ChartWidget, Renderer};
+use tokio_stream::{Stream, StreamExt};
+
+use datasource::{stream_file, Data};
 
 mod accelerometer;
 mod datasource;
 mod magnetometer;
 
-fn main() {
-    let _c = State::run(Settings::default());
-}
+const TEST_INPUT: &str = "test-input.csv";
 
-const DATA1: [(i32, i32); 30] = [
-    (-3, 1),
-    (-2, 3),
-    (4, 2),
-    (3, 0),
-    (6, -5),
-    (3, 11),
-    (6, 0),
-    (2, 14),
-    (3, 9),
-    (14, 7),
-    (8, 11),
-    (10, 16),
-    (7, 15),
-    (13, 8),
-    (17, 14),
-    (13, 17),
-    (19, 11),
-    (18, 8),
-    (15, 8),
-    (23, 23),
-    (15, 20),
-    (22, 23),
-    (22, 21),
-    (21, 30),
-    (19, 28),
-    (22, 23),
-    (30, 23),
-    (26, 35),
-    (33, 19),
-    (26, 19),
-];
-const DATA2: [(i32, i32); 30] = [
-    (1, 22),
-    (0, 22),
-    (1, 20),
-    (2, 24),
-    (4, 26),
-    (6, 24),
-    (5, 27),
-    (6, 27),
-    (7, 27),
-    (8, 30),
-    (10, 30),
-    (10, 33),
-    (12, 34),
-    (13, 31),
-    (15, 35),
-    (14, 33),
-    (17, 36),
-    (16, 35),
-    (17, 39),
-    (19, 38),
-    (21, 38),
-    (22, 39),
-    (23, 43),
-    (24, 44),
-    (24, 46),
-    (26, 47),
-    (27, 48),
-    (26, 49),
-    (28, 47),
-    (28, 50),
-];
+fn main() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let input_stream = rt.block_on(stream_file(&TEST_INPUT));
+    let settings = Settings::with_flags(Flags {
+        input_stream: Box::new(input_stream),
+    });
+    let _c = State::run(settings);
+}
 
 struct State {
     value: i32,
+    input_stream: Box<dyn Stream<Item = Data>>,
+    input_values: Vec<Data>,
     chart: MyChart,
     chart2: My3DChart,
     // accelerometer values, magnetometer values
     // update the values centrally and allow to present them in different manners
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Message {
+#[derive(Debug, Clone)]
+enum Message {
+    ReceivedNewData(Vec<Data>),
     Increment,
     Decrement,
     Tick,
 }
 
+struct Flags {
+    input_stream: Box<dyn Stream<Item = Data>>,
+}
+
 impl Application for State {
     type Executor = executor::Default;
-    type Flags = ();
+    type Flags = Flags;
     type Message = Message;
     type Theme = Theme;
 
-    fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         (
             State {
                 value: 1,
+                input_stream: flags.input_stream,
+                input_values: vec![],
                 chart: MyChart::default(),
                 chart2: My3DChart::default(),
             },
@@ -122,10 +79,11 @@ impl Application for State {
     }
 
     fn view(&self) -> Element<Message> {
-        let x = row![
+        let x = column![
             button("+").on_press(Message::Increment),
             text(self.value).size(50),
             button("-").on_press(Message::Decrement),
+            text(format!("most recent data: {:?}", self.input_values.last())).size(50),
         ]
         .padding(20)
         .align_items(iced::Alignment::Center);
@@ -159,6 +117,23 @@ impl Application for State {
             }
             Message::Tick => {
                 self.value += 1;
+
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let mut data = pin!(vec![]);
+                rt.block_on(async move { while let Some(x) = self.input_stream.next().await {} });
+                if data.len() > 0 {
+                    let a = Action::Close;
+                    let c = Command::batch(Message::ReceivedNewData(data));
+                    return c;
+                }
+            }
+            Message::ReceivedNewData(d) => {
+                let current_end = self.input_values.len();
+                self.input_values.extend(d);
+                let new = &self.input_values[current_end..];
+                // TODO parse the new data, propagate it, what more?
+                // etc.
+                // self.chart.update(state, event, bounds, cursor)
             }
         }
         Command::none()
@@ -166,6 +141,7 @@ impl Application for State {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         const FPS: u64 = 1;
+
         iced::time::every(Duration::from_millis(1000 / FPS)).map(|_| Message::Tick)
         // iced::Subscription::none()
     }
@@ -394,3 +370,36 @@ impl Default for My3DChart {
         }
     }
 }
+
+const DATA1: [(i32, i32); 30] = [
+    (-3, 1),
+    (-2, 3),
+    (4, 2),
+    (3, 0),
+    (6, -5),
+    (3, 11),
+    (6, 0),
+    (2, 14),
+    (3, 9),
+    (14, 7),
+    (8, 11),
+    (10, 16),
+    (7, 15),
+    (13, 8),
+    (17, 14),
+    (13, 17),
+    (19, 11),
+    (18, 8),
+    (15, 8),
+    (23, 23),
+    (15, 20),
+    (22, 23),
+    (22, 21),
+    (21, 30),
+    (19, 28),
+    (22, 23),
+    (30, 23),
+    (26, 35),
+    (33, 19),
+    (26, 19),
+];
