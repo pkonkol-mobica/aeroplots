@@ -3,28 +3,31 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
+
 #[derive(Debug)]
-struct Data {
-    timestamp: u64,
-    acc: AccData,
-    mag: MagData,
+pub struct Data {
+    pub timestamp: u64,
+    pub acc: AccData,
+    pub mag: MagData,
 }
 
 #[derive(Debug)]
-struct AccData {
-    x: f64,
-    y: f64,
-    z: f64,
+pub struct AccData {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 #[derive(Debug)]
-struct MagData {
-    x: f64,
-    y: f64,
-    z: f64,
+pub struct MagData {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl From<&str> for Data {
@@ -51,38 +54,51 @@ impl From<&str> for Data {
     }
 }
 
-async fn stream_file(path: &impl AsRef<Path>) -> bool {
-    use std::io::prelude::*;
-    let file = File::open(path).unwrap();
-    let reader = BufReader::new(file);
+async fn stream_file(path: &impl AsRef<Path>) -> impl Stream<Item = Data> {
+    let (tx, mut rx) = mpsc::channel::<Data>(10);
 
-    let mut prev = 0;
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let line = line.trim();
-        if line.len() == 0 {
-            continue;
+    // let x = path.to_owned();
+    let p = PathBuf::from(path.as_ref());
+    tokio::spawn(async move {
+        use std::io::prelude::*;
+        let file = File::open(p).unwrap();
+        let reader = BufReader::new(file);
+
+        let mut prev = 0;
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let line = line.trim();
+            if line.len() == 0 {
+                continue;
+            }
+            let data: Data = line.into();
+
+            if prev != 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(data.timestamp - prev)).await;
+            }
+            prev = data.timestamp;
+            tx.send(data).await.unwrap();
         }
-        let data: Data = line.into();
-        println!("{data:?}");
+    });
 
-        if prev != 0 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(data.timestamp - prev)).await;
-        }
-        prev = data.timestamp;
-    }
-
-    false
+    ReceiverStream::new(rx)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use super::*;
+    use tokio_stream::StreamExt;
 
     const TEST_FILE: &str = "test-input-short.csv";
 
     #[tokio::test]
     async fn test_stream_file() {
-        stream_file(&TEST_FILE).await;
+        let mut s = stream_file(&TEST_FILE).await;
+        let start = Instant::now();
+        while let Some(x) = s.next().await {
+            println!("received data {x:?} at {}ms", start.elapsed().as_millis());
+        }
     }
 }
