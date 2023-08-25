@@ -2,6 +2,7 @@ use std::{pin::pin, vec};
 
 use iced::{
     executor,
+    futures::{SinkExt, TryFutureExt},
     time::Duration,
     widget::{
         button,
@@ -14,8 +15,10 @@ use iced::{
 use plotters::prelude::ChartBuilder;
 // use plotters_backend::DrawingBackend;
 use plotters_iced::{plotters_backend::DrawingBackend, Chart, ChartWidget, Renderer};
+use tokio::time::Instant;
 use tokio_stream::{Stream, StreamExt};
 
+use accelerometer::CurrentValue2DChart;
 use datasource::{stream_file, Data};
 
 mod accelerometer;
@@ -25,78 +28,90 @@ mod magnetometer;
 const TEST_INPUT: &str = "test-input.csv";
 
 fn main() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let input_stream = rt.block_on(stream_file(&TEST_INPUT));
-    let settings = Settings::with_flags(Flags {
-        input_stream: Box::new(input_stream),
-    });
-    let _c = State::run(settings);
+    // let rt = tokio::runtime::Runtime::new().unwrap();
+    // let input_stream = rt.block_on(stream_file(&TEST_INPUT));
+    // let settings = Settings::with_flags(Flags {
+    //     input_stream: Box::new(input_stream),
+    // });
+    let _c = State::run(Settings::default());
 }
 
 struct State {
     value: i32,
-    input_stream: Box<dyn Stream<Item = Data>>,
+    // input_stream: Box<dyn Stream<Item = Data>>,
     input_values: Vec<Data>,
     chart: MyChart,
     chart2: My3DChart,
-    // accelerometer values, magnetometer values
+    // accelerometer values\
+    acc_current_chart: CurrentValue2DChart,
+    // magnetometer values
     // update the values centrally and allow to present them in different manners
 }
 
 #[derive(Debug, Clone)]
-enum Message {
-    ReceivedNewData(Vec<Data>),
+pub enum Message {
+    ReceivedNewData(Data),
     Increment,
     Decrement,
     Tick,
 }
 
-struct Flags {
-    input_stream: Box<dyn Stream<Item = Data>>,
-}
+// struct Flags {
+//     input_stream: Box<dyn Stream<Item = Data>>,
+// }
 
 impl Application for State {
     type Executor = executor::Default;
-    type Flags = Flags;
+    type Flags = ();
     type Message = Message;
     type Theme = Theme;
 
-    fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         (
             State {
                 value: 1,
-                input_stream: flags.input_stream,
+                // input_stream: flags.input_stream,
                 input_values: vec![],
                 chart: MyChart::default(),
                 chart2: My3DChart::default(),
+                acc_current_chart: CurrentValue2DChart::default(),
             },
             Command::none(),
         )
     }
 
     fn title(&self) -> String {
-        String::from("iced test")
+        String::from("aeroplot")
     }
 
     fn view(&self) -> Element<Message> {
-        let x = column![
+        let data_str = format!("{}", self.input_values.last().unwrap_or(&Data::default()));
+        let buttons = row![
             button("+").on_press(Message::Increment),
-            text(self.value).size(50),
+            text(self.value).size(20),
             button("-").on_press(Message::Decrement),
-            text(format!("most recent data: {:?}", self.input_values.last())).size(50),
+        ];
+        let x = column![
+            buttons,
+            // text(format!("most recent data: {:?}", self.input_values.last().unwrap_or(&Data::default()))).size(100),
+            text(data_str).size(25),
+            text(format!("input data len: {}", self.input_values.len())).size(25),
         ]
         .padding(20)
         .align_items(iced::Alignment::Center);
 
+        let acc_charts = row![self.acc_current_chart.view()].height(600);
+        let mag_charts = row![].height(100);
+        let test_charts = row![self.chart.view(), self.chart2.view()].height(600);
+        let chart_container = column![acc_charts, mag_charts, test_charts];
+
         let content = Column::new()
             .spacing(10)
             .align_items(Alignment::Center)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(Text::new("iced plotters test"))
+            .width(Length::FillPortion(1))
+            .height(Length::FillPortion(1))
             .push(x)
-            .push(self.chart.view())
-            .push(self.chart2.view());
+            .push(chart_container);
 
         Container::new(content)
             .width(Length::Fill)
@@ -113,37 +128,39 @@ impl Application for State {
                 self.value -= 1;
             }
             Message::Increment => {
-                self.value += 1;
+                self.value += 10;
             }
             Message::Tick => {
                 self.value += 1;
-
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                let mut data = pin!(vec![]);
-                rt.block_on(async move { while let Some(x) = self.input_stream.next().await {} });
-                if data.len() > 0 {
-                    let a = Action::Close;
-                    let c = Command::batch(Message::ReceivedNewData(data));
-                    return c;
-                }
             }
             Message::ReceivedNewData(d) => {
-                let current_end = self.input_values.len();
-                self.input_values.extend(d);
-                let new = &self.input_values[current_end..];
+                println!("received data {d:?}");
+                self.input_values.push(d);
+                // self.acc_current_chart.update(state, event, bounds, cursor)
+
                 // TODO parse the new data, propagate it, what more?
-                // etc.
-                // self.chart.update(state, event, bounds, cursor)
             }
         }
         Command::none()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        const FPS: u64 = 1;
+        struct Connect;
 
-        iced::time::every(Duration::from_millis(1000 / FPS)).map(|_| Message::Tick)
-        // iced::Subscription::none()
+        iced::subscription::channel(std::any::TypeId::of::<Connect>(), 100, |mut x| async move {
+            let mut input_stream = stream_file(&TEST_INPUT).await;
+            let mut interval = tokio::time::interval(Duration::from_millis(1000));
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        x.send(Message::Tick).await.unwrap();
+                    },
+                    Some(data) = input_stream.next() => {
+                        x.send(Message::ReceivedNewData(data)).await.unwrap();
+                    },
+                };
+            }
+        })
     }
 }
 
@@ -183,8 +200,6 @@ impl Chart<Message> for MyChart {
         chart
             .draw_series((0..8).map(|x| Circle::new((x, (x * 2)), 3, GREEN.filled())))
             .unwrap();
-        let _candlestick =
-            CandleStick::new(2, 130.0600, 131.3700, 128.8300, 129.1500, &GREEN, &RED, 15);
 
         let mut pie = Pie::new(
             &(50, 50),
@@ -194,11 +209,13 @@ impl Chart<Message> for MyChart {
             &["Red", "Blue", "Green", "White"],
         );
         pie.start_angle(-90.0); // retract to a right angle, so it starts aligned to a vertical Y axis.
+
         chart
             .draw_series([(2, 3)].map(|(x, y)| {
                 EmptyElement::at((x, y))
                     + Circle::new((0, 0), 10, BLUE)
                     + TriangleMarker::new((4, 5), 5, RED)
+                // + pie
             }))
             .unwrap();
 
@@ -321,35 +338,6 @@ impl Chart<Message> for My3DChart {
                 .style(&BLUE.mix(0.5)),
             )
             .unwrap();
-
-        // let elem = EmptyElement::at((-5., -5., -5.)) + polygon;
-
-        // let mut chart = builder
-        //     .caption("y=x^2", ("sans-serif", 50).into_font())
-        //     .margin(5)
-        //     .x_label_area_size(30)
-        //     .y_label_area_size(30)
-        //     .build_cartesian_2d(-1f32..1f32, -0.1f32..1f32)
-        //     .unwrap();
-
-        // chart.configure_mesh().draw().unwrap();
-
-        // chart
-        //     .draw_series(LineSeries::new(
-        //         (-50..=50).map(|x| x as f32 / 50.0).map(|x| (x, x * x)),
-        //         &RED,
-        //     ))
-        //     .unwrap()
-        //     .label("y = x^2")
-        //     .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
-
-        // chart
-        //     .configure_series_labels()
-        //     .background_style(&WHITE.mix(0.8))
-        //     .border_style(&BLACK)
-        //     .draw()
-        //     .unwrap();
-        //root.present();
     }
 }
 

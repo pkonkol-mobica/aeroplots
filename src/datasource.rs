@@ -1,6 +1,7 @@
 // TODO parse example data, mock real time stream from device using sleeps
 
 use std::{
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -28,6 +29,34 @@ pub struct MagData {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+}
+
+impl Default for Data {
+    fn default() -> Self {
+        Self {
+            timestamp: 0,
+            acc: AccData {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            mag: MagData {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        }
+    }
+}
+
+impl Display for Data {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "time:{} acc:{{x:{},y:{},z:{}}} mag:{{x:{},y:{},z:{}}}",
+            self.timestamp, self.acc.x, self.acc.y, self.acc.z, self.mag.x, self.mag.y, self.mag.z
+        )
+    }
 }
 
 impl From<&str> for Data {
