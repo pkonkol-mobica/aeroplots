@@ -7,7 +7,7 @@ use iced::{
     widget::{
         button,
         canvas::{Cache, Frame, Geometry},
-        column, row, text, Column, Container, Text,
+        column, row, text, Column, Container, Scrollable, Text,
     },
     window::Action,
     Alignment, Application, Command, Element, Length, Settings, Size, Subscription, Theme,
@@ -98,10 +98,11 @@ impl Application for State {
         .padding(20)
         .align_items(iced::Alignment::Center);
 
-        let acc_charts = row![self.acc_current_chart.view()].height(600);
-        let mag_charts = row![].height(100);
+        let acc_charts = row![self.acc_current_chart.view()].height(600).padding(30);
+        let mag_charts = row![].height(600);
         let test_charts = row![self.chart.view(), self.chart2.view()].height(600);
-        let chart_container = column![acc_charts, mag_charts, test_charts];
+        let test_charts2 = row![self.chart.view(), self.chart2.view()].height(600);
+        let chart_container = column![acc_charts, mag_charts, test_charts, test_charts2];
         println!("in view of State");
 
         let content = Column::new()
@@ -112,10 +113,12 @@ impl Application for State {
             .push(x)
             .push(chart_container);
 
-        Container::new(content)
+        let scrollable = Scrollable::new(content);
+
+        Container::new(scrollable)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(50)
+            .padding(10)
             .center_x()
             .center_y()
             .into()
