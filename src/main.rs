@@ -70,7 +70,6 @@ impl Application for State {
         (
             State {
                 value: 1,
-                // input_stream: flags.input_stream,
                 input_values: vec![],
                 chart: MyChart::default(),
                 chart2: My3DChart::default(),
@@ -93,7 +92,6 @@ impl Application for State {
         ];
         let x = column![
             buttons,
-            // text(format!("most recent data: {:?}", self.input_values.last().unwrap_or(&Data::default()))).size(100),
             text(data_str).size(25),
             text(format!("input data len: {}", self.input_values.len())).size(25),
         ]
@@ -104,6 +102,7 @@ impl Application for State {
         let mag_charts = row![].height(100);
         let test_charts = row![self.chart.view(), self.chart2.view()].height(600);
         let chart_container = column![acc_charts, mag_charts, test_charts];
+        println!("in view of State");
 
         let content = Column::new()
             .spacing(10)
@@ -135,6 +134,8 @@ impl Application for State {
             }
             Message::ReceivedNewData(d) => {
                 println!("received data {d:?}");
+                self.acc_current_chart
+                    .push_datapoint(d.timestamp, d.acc.x, d.acc.y, d.acc.z);
                 self.input_values.push(d);
                 // self.acc_current_chart.update(state, event, bounds, cursor)
 
