@@ -19,6 +19,7 @@ use tokio::time::Instant;
 use tokio_stream::{Stream, StreamExt};
 
 use datasource::{stream_file, Data};
+use generic::CurrentValue2DChart;
 
 mod accelerometer;
 mod datasource;
@@ -28,23 +29,17 @@ mod magnetometer;
 const TEST_INPUT: &str = "test-input.csv";
 
 fn main() {
-    // let rt = tokio::runtime::Runtime::new().unwrap();
-    // let input_stream = rt.block_on(stream_file(&TEST_INPUT));
-    // let settings = Settings::with_flags(Flags {
-    //     input_stream: Box::new(input_stream),
-    // });
     let _c = State::run(Settings::default());
 }
 
 struct State {
     value: i32,
-    // input_stream: Box<dyn Stream<Item = Data>>,
     input_values: Vec<Data>,
     chart: MyChart,
     chart2: My3DChart,
     // accelerometer values\
-    acc_current_chart: generic::CurrentValue2DChart,
-    mag_current_chart: generic::CurrentValue2DChart,
+    acc_current_chart: CurrentValue2DChart,
+    mag_current_chart: CurrentValue2DChart,
     // magnetometer values
     // update the values centrally and allow to present them in different manners
 }
@@ -70,8 +65,8 @@ impl Application for State {
                 input_values: vec![],
                 chart: MyChart::default(),
                 chart2: My3DChart::default(),
-                acc_current_chart: generic::CurrentValue2DChart::default(),
-                mag_current_chart: generic::CurrentValue2DChart::default(),
+                acc_current_chart: CurrentValue2DChart::with_title("Accelerometer current value"),
+                mag_current_chart: CurrentValue2DChart::with_title("Magnetometer current value"),
             },
             Command::none(),
         )
@@ -168,6 +163,7 @@ impl Application for State {
 }
 
 ///
+/// TEST
 /// MY CHART
 /// 2D
 ///

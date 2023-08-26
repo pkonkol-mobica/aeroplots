@@ -19,6 +19,7 @@ pub struct Datapoint {
 pub struct CurrentValue2DChart {
     cache: Cache,
     datapoints: Vec<Datapoint>,
+    title: String,
 }
 
 impl Chart<Message> for CurrentValue2DChart {
@@ -51,7 +52,7 @@ impl Chart<Message> for CurrentValue2DChart {
         let x_range_start = x_range_end - (TIME_RANGE as f64 / 1000.);
 
         let mut chart = builder
-            .caption("Current value 2d chart", &BLACK)
+            .caption(&self.title, ("sasns-serif", 30, &BLACK))
             .x_label_area_size(40)
             .y_label_area_size(40)
             .build_cartesian_2d(x_range_start..x_range_end, -1.0..1.0)
@@ -114,6 +115,14 @@ impl CurrentValue2DChart {
         self.datapoints.push(Datapoint { timestamp, x, y, z });
         self.cache.clear()
     }
+
+    pub fn with_title(title: &str) -> Self {
+        Self {
+            cache: Cache::new(),
+            datapoints: vec![],
+            title: String::from(title),
+        }
+    }
 }
 
 impl Default for CurrentValue2DChart {
@@ -121,6 +130,7 @@ impl Default for CurrentValue2DChart {
         Self {
             cache: Cache::new(),
             datapoints: vec![],
+            title: String::from("default current value chart"),
         }
     }
 }
