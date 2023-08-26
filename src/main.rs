@@ -18,11 +18,11 @@ use plotters_iced::{plotters_backend::DrawingBackend, Chart, ChartWidget, Render
 use tokio::time::Instant;
 use tokio_stream::{Stream, StreamExt};
 
-use accelerometer::CurrentValue2DChart;
 use datasource::{stream_file, Data};
 
 mod accelerometer;
 mod datasource;
+mod generic;
 mod magnetometer;
 
 const TEST_INPUT: &str = "test-input.csv";
@@ -43,7 +43,8 @@ struct State {
     chart: MyChart,
     chart2: My3DChart,
     // accelerometer values\
-    acc_current_chart: CurrentValue2DChart,
+    acc_current_chart: generic::CurrentValue2DChart,
+    mag_current_chart: generic::CurrentValue2DChart,
     // magnetometer values
     // update the values centrally and allow to present them in different manners
 }
@@ -55,10 +56,6 @@ pub enum Message {
     Decrement,
     Tick,
 }
-
-// struct Flags {
-//     input_stream: Box<dyn Stream<Item = Data>>,
-// }
 
 impl Application for State {
     type Executor = executor::Default;
@@ -73,7 +70,8 @@ impl Application for State {
                 input_values: vec![],
                 chart: MyChart::default(),
                 chart2: My3DChart::default(),
-                acc_current_chart: CurrentValue2DChart::default(),
+                acc_current_chart: generic::CurrentValue2DChart::default(),
+                mag_current_chart: generic::CurrentValue2DChart::default(),
             },
             Command::none(),
         )
@@ -98,11 +96,10 @@ impl Application for State {
         .padding(20)
         .align_items(iced::Alignment::Center);
 
-        let acc_charts = row![self.acc_current_chart.view()].height(600).padding(30);
-        let mag_charts = row![].height(600);
+        let acc_charts = row![self.acc_current_chart.view()].height(600);
+        let mag_charts = row![self.mag_current_chart.view()].height(600);
         let test_charts = row![self.chart.view(), self.chart2.view()].height(600);
-        let test_charts2 = row![self.chart.view(), self.chart2.view()].height(600);
-        let chart_container = column![acc_charts, mag_charts, test_charts, test_charts2];
+        let chart_container = column![acc_charts, mag_charts, test_charts].padding(20);
         println!("in view of State");
 
         let content = Column::new()
@@ -139,6 +136,8 @@ impl Application for State {
                 println!("received data {d:?}");
                 self.acc_current_chart
                     .push_datapoint(d.timestamp, d.acc.x, d.acc.y, d.acc.z);
+                self.mag_current_chart
+                    .push_datapoint(d.timestamp, d.mag.x, d.mag.y, d.mag.z);
                 self.input_values.push(d);
                 // self.acc_current_chart.update(state, event, bounds, cursor)
 
