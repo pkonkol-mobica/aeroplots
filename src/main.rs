@@ -19,7 +19,7 @@ use tokio::time::Instant;
 use tokio_stream::{Stream, StreamExt};
 
 use datasource::{stream_file, Data};
-use generic::CurrentValue2DChart;
+use generic::{AggregateValue2DChart, CurrentValue2DChart};
 
 mod accelerometer;
 mod datasource;
@@ -38,12 +38,13 @@ struct State {
     chart: MyChart,
     chart2: My3DChart,
     // accelerometer values\
+    // accelerometer_calculated_speed
     acc_current_chart: CurrentValue2DChart,
-    acc_speed_chart: CurrentValue2DChart,
-    acc_position_chart: CurrentValue2DChart,
+    // acc_speed_chart: AggregateValue2DChart,
+    // acc_position_chart: AggregateValue2DChart,
     mag_current_chart: CurrentValue2DChart,
     // magnetometer values
-    // update the values centrally and allow to present them in different manners
+    // accelerometer_calculated_power
 }
 
 #[derive(Debug, Clone)]
@@ -69,10 +70,6 @@ impl Application for State {
                 chart2: My3DChart::default(),
                 acc_current_chart: CurrentValue2DChart::with_title(
                     "Accelerometer current raw value",
-                ),
-                acc_speed_chart: CurrentValue2DChart::with_title("Accelerometer current speed"),
-                acc_position_chart: CurrentValue2DChart::with_title(
-                    "Accelerometer current position",
                 ),
                 mag_current_chart: CurrentValue2DChart::with_title(
                     "Magnetometer current raw value",
@@ -101,13 +98,18 @@ impl Application for State {
         .padding(20)
         .align_items(iced::Alignment::Center);
 
-        let acc_charts = row![
+        let acc_charts = column![
+            text("Accelerometer charts").size(25),
             self.acc_current_chart.view(),
-            self.acc_speed_chart.view(),
-            self.acc_position_chart.view()
         ]
+        .align_items(Alignment::Center)
         .height(600);
-        let mag_charts = row![self.mag_current_chart.view()].height(600);
+        let mag_charts = column![
+            text("Magnetometer charts").size(25),
+            self.mag_current_chart.view()
+        ]
+        .align_items(Alignment::Center)
+        .height(600);
         let test_charts = row![self.chart.view(), self.chart2.view()].height(600);
         let chart_container = column![acc_charts, mag_charts, test_charts].padding(20);
         println!("in view of State");
@@ -146,84 +148,10 @@ impl Application for State {
                 println!("received data {d:?}");
                 self.acc_current_chart
                     .push_datapoint(d.timestamp, d.acc.x, d.acc.y, d.acc.z);
-                fn trapezium_area(a: f64, b: f64, h: f64) -> f64 {
-                    (a + b) * h / 2.
-                }
-                if self.input_values.len() >= 1 {
-                    let prev_d = self.input_values.last().unwrap();
-                    let (x, y, z) = (
-                        trapezium_area(
-                            prev_d.acc.x,
-                            d.acc.x,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_d.acc.y,
-                            d.acc.y,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_d.acc.z,
-                            d.acc.z,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                    );
-                    self.acc_speed_chart.push_datapoint(d.timestamp, x, y, z);
-                }
-
-                if self.input_values.len() >= 2 {
-                    let prev_d = self.input_values.last().unwrap();
-                    let prev_prev_d = self.input_values.get(self.input_values.len() - 2).unwrap();
-                    // current speed
-                    let (sx, sy, sz) = (
-                        trapezium_area(
-                            prev_d.acc.x,
-                            d.acc.x,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_d.acc.x,
-                            d.acc.x,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_d.acc.x,
-                            d.acc.x,
-                            (d.timestamp - prev_d.timestamp) as f64 / 1000.,
-                        ),
-                    );
-                    // prev speed
-                    let (psx, psy, psz) = (
-                        trapezium_area(
-                            prev_prev_d.acc.x,
-                            prev_d.acc.x,
-                            (prev_d.timestamp - prev_prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_prev_d.acc.x,
-                            prev_d.acc.x,
-                            (prev_d.timestamp - prev_prev_d.timestamp) as f64 / 1000.,
-                        ),
-                        trapezium_area(
-                            prev_prev_d.acc.x,
-                            prev_d.acc.x,
-                            (prev_d.timestamp - prev_prev_d.timestamp) as f64 / 1000.,
-                        ),
-                    );
-                    let (x, y, z) = (
-                        trapezium_area(sx, psx, (d.timestamp - prev_d.timestamp) as f64 / 1000.),
-                        trapezium_area(sy, psy, (d.timestamp - prev_d.timestamp) as f64 / 1000.),
-                        trapezium_area(sz, psz, (d.timestamp - prev_d.timestamp) as f64 / 1000.),
-                    );
-                    self.acc_position_chart.push_datapoint(d.timestamp, x, y, z);
-                }
-
                 self.mag_current_chart
                     .push_datapoint(d.timestamp, d.mag.x, d.mag.y, d.mag.z);
                 self.input_values.push(d);
                 // self.acc_current_chart.update(state, event, bounds, cursor)
-
-                // TODO parse the new data, propagate it, what more?
             }
         }
         Command::none()
